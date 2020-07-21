@@ -17,6 +17,8 @@ class ImputerOp final : public OpKernel {
   float replaced_value_float_;
   std::vector<int64_t> imputed_values_int64_;
   int64_t replaced_value_int64_;
+  std::vector<std::string> imputed_values_string_;
+  std::string replaced_value_string_;
 };
 }  // namespace ml
 }  // namespace onnxruntime
