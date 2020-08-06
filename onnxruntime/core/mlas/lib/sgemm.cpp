@@ -815,11 +815,19 @@ Return Value:
 #elif defined(MLAS_TARGET_POWER)
         RowsHandled = MlasSgemmKernel(A, B, C, CountK, CountM, CountN, lda, ldc, alpha, ZeroMode);
 #else
+        /* Disable the following code tentatively because there is no support for s390x. */
+        if (ZeroMode) {
+          RowsHandled = (size_t) B + CountK + CountN + (size_t) alpha;
+        } else {
+          RowsHandled = (size_t) B + CountK + CountN + (size_t) alpha;
+        }
+        /*
         if (ZeroMode) {
             RowsHandled = MlasSgemmKernelZero(A, B, C, CountK, CountM, CountN, lda, ldc, alpha);
         } else {
             RowsHandled = MlasSgemmKernelAdd(A, B, C, CountK, CountM, CountN, lda, ldc, alpha);
         }
+        */
 #endif
 
         C += ldc * RowsHandled;
