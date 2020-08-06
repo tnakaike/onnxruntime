@@ -59,6 +59,12 @@ class TensorSeq {
     return tensors_[i];
   }
 
+  // Get by index
+  Tensor& GetMutable(size_t i) {
+    ORT_ENFORCE(i < tensors_.size());
+    return tensors_[i];
+  }
+
  private:
   // A sequence must be associated with only one data type and all tensors in the seq must be of that type
   // One other alternative of storing the data type of a seq is to templatize the TensorSeq class.

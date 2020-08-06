@@ -2,6 +2,8 @@
 // Licensed under the MIT License.
 
 #include "core/providers/cpu/ml/imputer.h"
+#include "core/providers/cpu/tensor/utils.h"
+#include "core/framework/TensorSeq.h"
 #include <cmath>
 /**
 https://github.com/onnx/onnx/blob/master/onnx/defs/traditionalml/defs.cc
@@ -132,26 +134,28 @@ void Impute<std::string>(const std::string* x_data,
 
 template <typename T>
 common::Status ComputeByType(OpKernelContext* context,
+                      const Tensor* X,
+                      Tensor* Y,
                       T replaced_value,
                       const std::vector<T>& imputed_values) {
   if (imputed_values.empty()) {
     return Status(ONNXRUNTIME, FAIL, "Empty value of imputed values.");
   }
 
-  const auto* tensor_pointer = context->Input<Tensor>(0);
-  if (tensor_pointer == nullptr) return Status(common::ONNXRUNTIME, common::FAIL, "input count mismatch");
-  const Tensor& X = *tensor_pointer;
-  const TensorShape& x_shape = X.Shape();
+  if (X == nullptr) return Status(common::ONNXRUNTIME, common::FAIL, "input count mismatch");
+  const TensorShape& x_shape = X->Shape();
   auto& dims = x_shape.GetDims();
   if (dims.empty()) {
     return Status(ONNXRUNTIME, FAIL, "Empty input dimensions.");
   }
 
-  const T* x_data = X.template Data<T>();
+  const T* x_data = X->template Data<T>();
   size_t x_size = x_shape.Size();
   int64_t stride = dims.size() == 1 ? dims[0] : dims[1];
 
-  Tensor* Y = context->Output(0, x_shape);
+  if (Y == nullptr) {
+    Y = context->Output(0, x_shape);
+  }
   T* y_data = Y->template MutableData<T>();
 
   Impute<T>(x_data, y_data, replaced_value, imputed_values, stride, x_size);
@@ -160,19 +164,114 @@ common::Status ComputeByType(OpKernelContext* context,
 }
 
 common::Status ImputerOp::Compute(OpKernelContext* context) const {
-  const auto* input_tensor_ptr = context->Input<Tensor>(0);
+  const Tensor* input_tensor_ptr = context->Input<Tensor>(0);
   ORT_ENFORCE(input_tensor_ptr != nullptr);
   if (input_tensor_ptr->IsDataType<float>()) {
-    return ComputeByType<float>(context, replaced_value_float_, imputed_values_float_);
+    return ComputeByType<float>(context, input_tensor_ptr, (Tensor*) nullptr, replaced_value_float_, imputed_values_float_);
   }
   if (input_tensor_ptr->IsDataType<int64_t>()) {
-    return ComputeByType<int64_t>(context, replaced_value_int64_, imputed_values_int64_);
+    return ComputeByType<int64_t>(context, input_tensor_ptr, (Tensor*) nullptr, replaced_value_int64_, imputed_values_int64_);
   } 
   if (input_tensor_ptr->IsDataType<std::string>()) {
-    return ComputeByType<std::string>(context, replaced_value_string_, imputed_values_string_);
+    return ComputeByType<std::string>(context, input_tensor_ptr, (Tensor*) nullptr, replaced_value_string_, imputed_values_string_);
   } else {
     return Status(ONNXRUNTIME, INVALID_ARGUMENT, "Invalid type");
   }
+}
+
+ONNX_CPU_OPERATOR_ML_KERNEL(
+    SeqImputer,
+    1,
+    KernelDefBuilder().TypeConstraint("S", DataTypeImpl::AllSequenceTensorTypes()),
+    SeqImputerOp);
+
+SeqImputerOp::SeqImputerOp(const OpKernelInfo& info) : OpKernel(info),
+                                                 input_positions_(info.GetAttrsOrDefault<int64_t>("input_positions")),
+                                                 output_positions_(info.GetAttrsOrDefault<int64_t>("input_positions")),
+                                                 imputed_values_float_(info.GetAttrsOrDefault<float>("imputed_value_floats")),
+                                                 imputed_values_int64_(info.GetAttrsOrDefault<int64_t>("imputed_value_int64s")),
+                                                 imputed_values_string_(info.GetAttrsOrDefault<std::string>("imputed_value_strings")) {
+  if (input_positions_.empty())
+    ORT_THROW("Expected 'input_positions' attribute");
+  if (output_positions_.empty())
+    ORT_THROW("Expected 'output_positions' attribute");
+  if (!imputed_values_float_.empty() && !info.GetAttr<float>("replaced_value_float", &replaced_value_float_).IsOK())
+    ORT_THROW("Expected 'replaced_value_float' attribute since 'imputed_value_floats' is specified");
+  if (!imputed_values_int64_.empty() && !info.GetAttr<int64_t>("replaced_value_int64", &replaced_value_int64_).IsOK())
+    ORT_THROW("Expected 'replace_value_int64' attribute since 'imputed_values_int64' is specified");
+  if (!imputed_values_string_.empty() && !info.GetAttr<std::string>("replaced_value_string", &replaced_value_string_).IsOK())
+    ORT_THROW("Expected 'replace_value_string' attribute since 'imputed_values_string' is specified");
+  ORT_ENFORCE((imputed_values_float_.empty() ^ imputed_values_int64_.empty()) ||
+              (imputed_values_float_.empty() ^ imputed_values_string_.empty()) ||
+              (imputed_values_int64_.empty() ^ imputed_values_string_.empty()),
+              "Must provide imputed_values_float_ or imputed_values_int64_ or imputed_values_string_. but only one");
+}
+
+Status CreateCopyAndAppendCpuTensor(const Tensor* in_tensor, OpKernelContext* context, std::vector<Tensor>& tensors) {
+  AllocatorPtr alloc;
+  ORT_RETURN_IF_ERROR(context->GetTempSpaceAllocator(&alloc));
+  Tensor tmp(in_tensor->DataType(), onnxruntime::TensorShape(in_tensor->Shape()), alloc);
+  CopyCpuTensor(in_tensor, &tmp);
+  tensors.push_back(std::move(tmp));
+  return Status::OK();
+}
+
+Tensor* GetTensor(TensorSeq* X, int64_t idx, int64_t size) {
+  ORT_ENFORCE(idx < size, "Invalid input position. Must be less than the sequence size ", size);
+  return &X->GetMutable(idx);
+}
+
+common::Status SeqImputerOp::Compute(OpKernelContext* context, const Tensor* X, Tensor* Y) const {
+  if (X->IsDataType<float>()) {
+    return ComputeByType<float>(context, X, Y, replaced_value_float_, imputed_values_float_);
+  }
+  if (X->IsDataType<int64_t>()) {
+    return ComputeByType<int64_t>(context, X, Y, replaced_value_int64_, imputed_values_int64_);
+  } 
+  if (X->IsDataType<std::string>()) {
+    return ComputeByType<std::string>(context, X, Y, replaced_value_string_, imputed_values_string_);
+  } else {
+    return Status(ONNXRUNTIME, INVALID_ARGUMENT, "Invalid type");
+  }
+}
+
+common::Status SeqImputerOp::Compute(OpKernelContext* context) const {
+  TensorSeq* X = (TensorSeq*) context->Input<TensorSeq>(0);
+  ORT_ENFORCE(X != nullptr, "Got nullptr for sequence input.");
+
+  int64_t seq_size = static_cast<int64_t>(X->Size());
+  std::vector<Tensor> tensors;
+  tensors.reserve(seq_size);
+  AllocatorPtr alloc;
+  ORT_RETURN_IF_ERROR(context->GetTempSpaceAllocator(&alloc));
+
+  int64_t seq_idx = 0;
+  for (int64_t input_idx : input_positions_) {
+    ORT_ENFORCE(input_idx >= seq_idx, "Invalid input position. Must be equals to or greater than zero.");
+    while (seq_idx < input_idx) {
+      // CreateCopyAndAppendCpuTensor(GetTensor(X, seq_idx, seq_size), context, tensors);
+      tensors.push_back(std::move(*GetTensor(X, seq_idx, seq_size)));
+      seq_idx++;
+    }
+    if (seq_idx < seq_size) {
+      Tensor* tensor = GetTensor(X, seq_idx, seq_size);
+      // Tensor tmp(tensor->DataType(), onnxruntime::TensorShape(tensor->Shape()), alloc);
+      Compute(context, tensor, tensor);
+      tensors.push_back(std::move(*tensor));
+      seq_idx++;
+    }
+  }
+  while (seq_idx < seq_size) {
+    // CreateCopyAndAppendCpuTensor(GetTensor(X, seq_idx, seq_size), context, tensors);
+    tensors.push_back(std::move(*GetTensor(X, seq_idx, seq_size)));
+    seq_idx++;
+  }
+
+  auto* Y = context->Output<TensorSeq>(0);
+  Y->SetType(X->DataType());
+  Y->SetElements(std::move(tensors));
+
+  return Status::OK();
 }
 }  // namespace ml
 }  // namespace onnxruntime
