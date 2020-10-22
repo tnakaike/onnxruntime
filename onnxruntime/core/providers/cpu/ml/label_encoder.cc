@@ -185,5 +185,22 @@ void LabelEncoder_2<std::int64_t, std::int64_t>::InitializeSomeFields(const OpKe
   info.GetAttrOrDefault<std::int64_t>("default_int64", &_default_value, (std::int64_t)-1);
 };
 
+ONNX_CPU_OPERATOR_TYPED_ML_KERNEL(
+    LabelEncoder,
+    2,
+    float_float,
+    KernelDefBuilder().TypeConstraint("T1",
+                                      std::vector<MLDataType>{DataTypeImpl::GetTensorType<float>()})
+        .TypeConstraint("T2",
+                        std::vector<MLDataType>{DataTypeImpl::GetTensorType<float>()}),
+    LabelEncoder_2<float, float>)
+
+template <>
+void LabelEncoder_2<float, float>::InitializeSomeFields(const OpKernelInfo& info) {
+  _key_field_name = "keys_floats";
+  _value_field_name = "values_floats";
+  info.GetAttrOrDefault<float>("default_float", &_default_value, -0.0f);
+};
+
 }  // namespace ml
 }  // namespace onnxruntime
