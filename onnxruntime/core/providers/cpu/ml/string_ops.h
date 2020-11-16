@@ -15,5 +15,16 @@ class ConcatStrOp final : public OpKernel {
  private:
   std::string separator_;
 };
+
+class SplitStrOp final : public OpKernel {
+ public:
+  explicit SplitStrOp(const OpKernelInfo& info);
+  common::Status Compute(OpKernelContext* context) const override;
+
+ private:
+  std::string separator_;
+  int64_t index_;
+  int64_t keep_;
+};
 }  // namespace ml
 }  // namespace onnxruntime
