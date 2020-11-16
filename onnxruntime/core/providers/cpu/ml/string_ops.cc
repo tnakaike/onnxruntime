@@ -59,7 +59,7 @@ common::Status ConcatStrOp::Compute(OpKernelContext* context) const {
       std::string x_str = x_data[i];
       std::string y_str = y_data[i];
       std::string z_str = x_str + separator_ + y_str;
-      printf("x=%s y=%s z=%s\n", x_str.c_str(), y_str.c_str(), z_str.c_str());
+      // printf("x=%s y=%s z=%s\n", x_str.c_str(), y_str.c_str(), z_str.c_str());
       z_data[i] = z_str;
   }
 
