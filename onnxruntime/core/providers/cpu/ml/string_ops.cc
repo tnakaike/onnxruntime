@@ -147,5 +147,38 @@ common::Status SplitStrOp::Compute(OpKernelContext* context) const {
 
   return Status::OK();
 }
+
+
+
+/********************** StrLower **********************/
+
+
+ONNX_CPU_OPERATOR_ML_KERNEL(
+    StrLower,
+    1,
+    KernelDefBuilder().TypeConstraint("T", DataTypeImpl::GetTensorType<std::string>()),
+    StrLowerOp);
+
+StrLowerOp::StrLowerOp(const OpKernelInfo& info) : OpKernel(info){
+}
+
+common::Status StrLowerOp::Compute(OpKernelContext* context) const {
+  const Tensor& X = *context->Input<Tensor>(0);
+  const TensorShape& x_shape = X.Shape();
+  size_t x_size = x_shape.Size();
+  const std::string *x_data = X.template Data<std::string>();
+
+  Tensor* Z = context->Output(0, x_shape);
+  std::string *z_data = Z->template MutableData<std::string>();
+  for (size_t i = 0; i < x_size; i++) {
+      std::string x_str = x_data[i];
+      std::string z_str;
+      z_str.resize(x_size);
+      std::transform(x_str.cbegin(), x_str.cend(), z_str.begin(), tolower);
+      z_data[i] = z_str;
+  }
+
+  return Status::OK();
+}
 }  // namespace ml
 }  // namespace onnxruntime

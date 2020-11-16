@@ -26,5 +26,11 @@ class SplitStrOp final : public OpKernel {
   int64_t index_;
   int64_t keep_;
 };
+
+class StrLowerOp final : public OpKernel {
+ public:
+  explicit StrLowerOp(const OpKernelInfo& info);
+  common::Status Compute(OpKernelContext* context) const override;
+};
 }  // namespace ml
 }  // namespace onnxruntime
