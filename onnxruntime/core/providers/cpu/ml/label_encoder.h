@@ -6,6 +6,8 @@
 #include "core/common/common.h"
 #include "core/framework/op_kernel.h"
 #include "core/providers/cpu/ml/ml_common.h"
+#include <iostream>
+#include <iomanip>
 
 namespace onnxruntime {
 namespace ml {
@@ -84,7 +86,10 @@ class LabelEncoder_2 final : public OpKernel {
         output[i] = _default_value;
       else
         output[i] = found->second;
+
+      // std::cout << std::fixed << std::setprecision(8) << input[i] << ": " << output[i] << std::endl;
     }
+    // std::cout << std::endl;
 
     return Status::OK();
   }
