@@ -50,43 +50,33 @@ ONNX_CPU_OPERATOR_ML_KERNEL(
     Imputer,
     1,
     KernelDefBuilder().TypeConstraint("T", {DataTypeImpl::GetTensorType<float>(),
-                                            DataTypeImpl::GetTensorType<int64_t>()}),
+                                            DataTypeImpl::GetTensorType<int64_t>(),
+                                            DataTypeImpl::GetTensorType<std::string>()}),
     ImputerOp);
 
 ImputerOp::ImputerOp(const OpKernelInfo& info) : OpKernel(info),
                                                  imputed_values_float_(info.GetAttrsOrDefault<float>("imputed_value_floats")),
-                                                 imputed_values_int64_(info.GetAttrsOrDefault<int64_t>("imputed_value_int64s")) {
+                                                 imputed_values_int64_(info.GetAttrsOrDefault<int64_t>("imputed_value_int64s")),
+                                                 imputed_values_string_(info.GetAttrsOrDefault<std::string>("imputed_value_strings")) {
   if (!imputed_values_float_.empty() && !info.GetAttr<float>("replaced_value_float", &replaced_value_float_).IsOK())
     ORT_THROW("Expected 'replaced_value_float' attribute since 'imputed_value_floats' is specified");
   if (!imputed_values_int64_.empty() && !info.GetAttr<int64_t>("replaced_value_int64", &replaced_value_int64_).IsOK())
     ORT_THROW("Expected 'replace_value_int64' attribute since 'imputed_values_int64' is specified");
-  ORT_ENFORCE(imputed_values_float_.empty() ^ imputed_values_int64_.empty(),
-              "Must provide imputed_values_float_ or imputed_values_int64_ but not both.");
+  if (!imputed_values_string_.empty() && !info.GetAttr<std::string>("replaced_value_string", &replaced_value_string_).IsOK())
+    ORT_THROW("Expected 'replace_value_string' attribute since 'imputed_values_string' is specified");
+  ORT_ENFORCE((imputed_values_float_.empty() ^ imputed_values_int64_.empty()) ||
+              (imputed_values_float_.empty() ^ imputed_values_string_.empty()) ||
+              (imputed_values_int64_.empty() ^ imputed_values_string_.empty()),
+              "Must provide imputed_values_float_ or imputed_values_int64_ or imputed_values_string_. but only one");
 }
 
 template <typename T>
-common::Status ComputeByType(OpKernelContext* context,
-                             T replaced_value,
-                             const std::vector<T>& imputed_values) {
-  if (imputed_values.empty()) {
-    return Status(ONNXRUNTIME, FAIL, "Empty value of imputed values.");
-  }
-
-  const auto* tensor_pointer = context->Input<Tensor>(0);
-  if (tensor_pointer == nullptr) return Status(common::ONNXRUNTIME, common::FAIL, "input count mismatch");
-  const Tensor& X = *tensor_pointer;
-  const TensorShape& x_shape = X.Shape();
-  auto& dims = x_shape.GetDims();
-  if (dims.empty()) {
-    return Status(ONNXRUNTIME, FAIL, "Empty input dimensions.");
-  }
-
-  const T* x_data = X.template Data<T>();
-  size_t x_size = x_shape.Size();
-  int64_t stride = dims.size() == 1 ? dims[0] : dims[1];
-
-  Tensor* Y = context->Output(0, x_shape);
-  T* y_data = Y->template MutableData<T>();
+void Impute(const T* x_data,
+            T* y_data,
+            T replaced_value,
+            const std::vector<T>& imputed_values,
+            int64_t stride,
+            size_t x_size) {
   if (imputed_values.size() == static_cast<size_t>(stride)) {
     for (size_t i = 0; i < x_size; i++) {
       if (std::isnan(static_cast<float>(x_data[i])) && std::isnan(static_cast<float>(replaced_value))) {
@@ -108,6 +98,63 @@ common::Status ComputeByType(OpKernelContext* context,
       }
     }
   }
+}
+
+template<>
+void Impute<std::string>(const std::string* x_data,
+                                   std::string* y_data,
+                                   std::string replaced_value,
+                                   const std::vector<std::string>& imputed_values,
+                                   int64_t stride,
+                                   size_t x_size) {
+  if (imputed_values.size() == static_cast<size_t>(stride)) {
+    for (size_t i = 0; i < x_size; i++) {
+      if (x_data[i] == std::string("nan") && replaced_value == std::string("nan")) {
+        y_data[i] = imputed_values[i % stride];
+      } else if (x_data[i] == replaced_value) {
+        y_data[i] = imputed_values[i % stride];
+      } else {
+        y_data[i] = x_data[i];
+      }
+    }
+  } else {
+    for (size_t i = 0; i < x_size; i++) {
+      if (x_data[i] == std::string("nan") && replaced_value == std::string("nan")) {
+        y_data[i] = imputed_values[0];
+      } else if (x_data[i] == replaced_value) {
+        y_data[i] = imputed_values[0];
+      } else {
+        y_data[i] = x_data[i];
+      }
+    }
+  }
+}
+
+template <typename T>
+common::Status ComputeByType(OpKernelContext* context,
+                      T replaced_value,
+                      const std::vector<T>& imputed_values) {
+  if (imputed_values.empty()) {
+    return Status(ONNXRUNTIME, FAIL, "Empty value of imputed values.");
+  }
+
+  const auto* tensor_pointer = context->Input<Tensor>(0);
+  if (tensor_pointer == nullptr) return Status(common::ONNXRUNTIME, common::FAIL, "input count mismatch");
+  const Tensor& X = *tensor_pointer;
+  const TensorShape& x_shape = X.Shape();
+  auto& dims = x_shape.GetDims();
+  if (dims.empty()) {
+    return Status(ONNXRUNTIME, FAIL, "Empty input dimensions.");
+  }
+
+  const T* x_data = X.template Data<T>();
+  size_t x_size = x_shape.Size();
+  int64_t stride = dims.size() == 1 ? dims[0] : dims[1];
+
+  Tensor* Y = context->Output(0, x_shape);
+  T* y_data = Y->template MutableData<T>();
+
+  Impute<T>(x_data, y_data, replaced_value, imputed_values, stride, x_size);
 
   return Status::OK();
 }
@@ -120,6 +167,9 @@ common::Status ImputerOp::Compute(OpKernelContext* context) const {
   }
   if (input_tensor_ptr->IsDataType<int64_t>()) {
     return ComputeByType<int64_t>(context, replaced_value_int64_, imputed_values_int64_);
+  }
+  if (input_tensor_ptr->IsDataType<std::string>()) {
+    return ComputeByType<std::string>(context, replaced_value_string_, imputed_values_string_);
   } else {
     return Status(ONNXRUNTIME, INVALID_ARGUMENT, "Invalid type");
   }
