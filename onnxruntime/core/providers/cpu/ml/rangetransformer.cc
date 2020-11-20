@@ -44,14 +44,14 @@ RangeTransformerOp<T>::RangeTransformerOp(const OpKernelInfo& info) : OpKernel(i
     size_t keys_size = keys_upper_strings_.size();
     for (size_t i = 0; i < keys_size; i++){
         if ("None" == keys_upper_strings_[i]){
-            keys_upper_float_[i] = std::numeric_limits<float>::quiet_NaN();
+            keys_upper_float_.push_back(std::numeric_limits<float>::quiet_NaN());
         } else {
-            keys_upper_float_[i] = std::stof(keys_upper_strings_[i]);
+            keys_upper_float_.push_back(std::stof(keys_upper_strings_[i]));
         }
         if ("None" == keys_lower_strings_[i]){
-            keys_lower_float_[i] = std::numeric_limits<float>::quiet_NaN();
+            keys_lower_float_.push_back(std::numeric_limits<float>::quiet_NaN());
         } else {
-            keys_lower_float_[i] = std::stof(keys_lower_strings_[i]);
+            keys_lower_float_.push_back(std::stof(keys_lower_strings_[i]));
         }
     }
 }
