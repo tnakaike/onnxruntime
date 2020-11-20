@@ -37,10 +37,10 @@ ONNX_CPU_OPERATOR_TYPED_ML_KERNEL(
     RangeTransformerOp<int32_t>);
 
 template <typename T>
-RangeTransformerOp<T>::RangeTransformerOp(const OpKernelInfo& info) : OpKernel(info) {
-    ORT_ENFORCE(info.GetAttrs<std::string>("keys_upper_strings", keys_upper_strings_).IsOK());
-    ORT_ENFORCE(info.GetAttrs<std::string>("keys_lower_strings", keys_lower_strings_).IsOK());
-    ORT_ENFORCE(info.GetAttrs<float>("values_float", values_float_).IsOK());
+RangeTransformerOp<T>::RangeTransformerOp(const OpKernelInfo& info) : OpKernel(info),
+                keys_upper_strings_(info.GetAttrsOrDefault<std::string>("keys_upper_strings")),
+                keys_lower_strings_(info.GetAttrsOrDefault<std::string>("keys_lower_strings")),
+                values_float_(info.GetAttrsOrDefault<float>("values_float")) {
     size_t keys_size = keys_upper_strings_.size();
     for (size_t i = 0; i < keys_size; i++){
         if ("None" == keys_upper_strings_[i]){
