@@ -69,7 +69,7 @@ common::Status RangeTransformerOp<T>::Compute(OpKernelContext* context) const {
   }
 
   Tensor* Z = context->Output(0, x_shape);
-  double *z_data = Z->template MutableData<double>();
+  float *z_data = Z->template MutableData<float>();
   for (size_t i = 0; i < x_size; i++) {
       T x = x_data[i];
       z_data[i] = x;
