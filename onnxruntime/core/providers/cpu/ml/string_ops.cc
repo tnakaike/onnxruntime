@@ -133,7 +133,7 @@ common::Status SplitStrOp::Compute(OpKernelContext* context) const {
     for (size_t i = 0; i < x_size; i++) {
       std::string x_str = x_data[i];
       std::string z_str = x_str.substr(index_);
-      printf("x=%s z=%s\n", x_str.c_str(), z_str.c_str());
+      // printf("x=%s z=%s\n", x_str.c_str(), z_str.c_str());
       z_data[i] = z_str;
     }
   } else {
