@@ -7,18 +7,18 @@
 
 namespace onnxruntime {
 namespace ml {
-class ConcatStrOp final : public OpKernel {
+class StringConcatOp final : public OpKernel {
  public:
-  explicit ConcatStrOp(const OpKernelInfo& info);
+  explicit StringConcatOp(const OpKernelInfo& info);
   common::Status Compute(OpKernelContext* context) const override;
 
  private:
   std::string separator_;
 };
 
-class SplitStrOp final : public OpKernel {
+class StringSplitOp final : public OpKernel {
  public:
-  explicit SplitStrOp(const OpKernelInfo& info);
+  explicit StringSplitOp(const OpKernelInfo& info);
   common::Status Compute(OpKernelContext* context) const override;
 
  private:

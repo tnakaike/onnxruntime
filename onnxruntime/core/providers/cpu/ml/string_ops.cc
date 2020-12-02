@@ -6,10 +6,10 @@
 /**
 https://github.com/onnx/onnx/blob/master/onnx/defs/traditionalml/defs.cc
 ONNX_ML_OPERATOR_SET_SCHEMA(
-    ConcatStr,
+    StringConcat,
     1,
     OpSchema()
-        .SetDoc(ConcatStr_ver1_doc)
+        .SetDoc(StringConcat_ver1_doc)
         .Input(0, "X", "Strings to be concatenated.", "T")
         .Input(1, "Y", "Strings to be concatenated.", "T")
         .Output(0, "Z", "Concatenated strings", "T")
@@ -24,10 +24,10 @@ ONNX_ML_OPERATOR_SET_SCHEMA(
             OPTIONAL_VALUE));
 
 ONNX_ML_OPERATOR_SET_SCHEMA(
-    ConcatStr,
+    StringConcat,
     1,
     OpSchema()
-        .SetDoc(ConcatStr_ver1_doc)
+        .SetDoc(StringConcat_ver1_doc)
         .Input(0, "X", "Strings to be concatenated.", "T")
         .Output(0, "Z", "Concatenated strings", "T")
         .TypeConstraint(
@@ -63,16 +63,16 @@ namespace onnxruntime {
 namespace ml {
 
 ONNX_CPU_OPERATOR_ML_KERNEL(
-    ConcatStr,
+    StringConcat,
     1,
     KernelDefBuilder().TypeConstraint("T", DataTypeImpl::GetTensorType<std::string>()),
-    ConcatStrOp);
+    StringConcatOp);
 
-ConcatStrOp::ConcatStrOp(const OpKernelInfo& info) : OpKernel(info),
+StringConcatOp::StringConcatOp(const OpKernelInfo& info) : OpKernel(info),
                                                      separator_(info.GetAttrOrDefault<std::string>("separator", "")) {
 }
 
-common::Status ConcatStrOp::Compute(OpKernelContext* context) const {
+common::Status StringConcatOp::Compute(OpKernelContext* context) const {
   const Tensor& X = *context->Input<Tensor>(0);
   const TensorShape& x_shape = X.Shape();
   size_t x_size = x_shape.Size();
@@ -101,12 +101,12 @@ common::Status ConcatStrOp::Compute(OpKernelContext* context) const {
 }
 
 ONNX_CPU_OPERATOR_ML_KERNEL(
-    SplitStr,
+    StringSplit,
     1,
     KernelDefBuilder().TypeConstraint("T", DataTypeImpl::GetTensorType<std::string>()),
-    SplitStrOp);
+    StringSplitOp);
 
-SplitStrOp::SplitStrOp(const OpKernelInfo& info) : OpKernel(info),
+StringSplitOp::StringSplitOp(const OpKernelInfo& info) : OpKernel(info),
                                                    separator_(info.GetAttrOrDefault<std::string>("separator", "")),
                                                    index_(info.GetAttrOrDefault<int64_t>("index", -1)),
                                                    keep_(info.GetAttrOrDefault<int64_t>("keep", -1)) {
@@ -118,7 +118,7 @@ SplitStrOp::SplitStrOp(const OpKernelInfo& info) : OpKernel(info),
     ORT_THROW("Specify either separator or index");
 }
 
-common::Status SplitStrOp::Compute(OpKernelContext* context) const {
+common::Status StringSplitOp::Compute(OpKernelContext* context) const {
   if (!separator_.empty())
     return Status(ONNXRUNTIME, FAIL, "SpritStr with separator is not implemented yet.");
     
